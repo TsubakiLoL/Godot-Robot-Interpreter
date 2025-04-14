@@ -1,0 +1,6 @@
+[gd_scene load_steps=2 format=3 uid="uid://kc00o28t8jfq"]
+
+[ext_resource type="Script" uid="uid://cvsmu8wcpeygn" path="res://Autoload/PromptMessageControler/prompt_message_controler.gd" id="1_558al"]
+
+[node name="PromptMessageControler" type="Node"]
+script = ExtResource("1_558al")
