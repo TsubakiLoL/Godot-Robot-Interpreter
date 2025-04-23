@@ -15,7 +15,8 @@ class_name ChatNode
 enum variable_type{
 	TYPE_STRING=0,
 	TYPE_SELECT=1,
-	TYPE_BOOL=2
+	TYPE_BOOL=2,
+	TYPE_COLOR=3
 }
 ##用于记录节点位置的变量
 var position_x:float=0
@@ -33,9 +34,12 @@ var mod_node:String
 
 ##输入节点类型数组
 var input_port_array:Array[String]=[]
+##输入端口的名字（用于可视化编辑）
+var input_port_name:Array[String]=[]
 ##输出节点类型数组
 var output_port_array:Array[String]=[]
-
+##输出端口的名字（用于可视化编辑）
+var output_port_name:Array[String]=[]
 
 ##需要从外部输入的变量
 var variable_name_array:Array[String]=[]
@@ -45,14 +49,7 @@ var variable_type_array:Array[variable_type]=[]
 var variable_type_more:Array=[]
 ##外部输入变量的显示标识
 var variable_name_view:Array[String]=[]
-##触发器类型
-#enum triger_type{
-	#TYPE_BULLET=0,
-	#TYPE_ROOM=1,
-	#TYPE_SIDE=2,
-	#TYPE_ENTER=3,
-	#TYPE_EXIT=4,
-#}
+
 ##触发器名字
 static var triger_type_name:Dictionary={
 	0:"弹幕消息",
@@ -62,14 +59,7 @@ static var triger_type_name:Dictionary={
 	4:"退出状态消息"
 }
 
-##输入的数据的数组
-var input_port_data:Array=[]
-##用于标注输入数据就位的数组
-var input_port_ready:Array[bool]=[]
-##输出数据的数组
-var output_port_data:Array=[]
-##输出是否准备好
-var is_out_ready:bool=false
+
 ##链接的下级节点
 var next_node_array:Array[Array]=[]
 ##链接的上级节点
@@ -78,47 +68,56 @@ var from_node_array:Array[Array]=[]
 var root:NodeRoot
 func _init(root:NodeRoot) -> void:
 	self.root=root
-##初始化输入类型
-func init_input():
-	input_port_data.clear()
-	input_port_ready.clear()
-	output_port_data.clear()
+
+#初始化输入堆
+func init_input_dic(input_data_dic:Dictionary,input_ready_dic:Dictionary):
+	input_data_dic[self]=[]
+	input_ready_dic[self]=[]
 	for i in input_port_array:
-		input_port_data.append(false)
-		input_port_ready.append(false)
+		input_data_dic[self].append(false)
+		input_ready_dic[self].append(false)
+	
+func init_ready_dic(input_ready_dic:Dictionary):
+	input_ready_dic[self]=[]
+	for i in input_port_array:
+		input_ready_dic[self].append(false)
+#初始化输出堆
+func init_output_dic(dic:Dictionary):
+	dic[self]=[]
 	for i in output_port_array:
-		output_port_data.append(false)
-##执行当前端口的输入逻辑
-func act(input,to_port:int,id:String):
-	#print("节点类型：",ChatNodeGraph.node_name[type]," ID:",self.id," 端口:",to_port,"收到输入",input)
-	if to_port<input_port_array.size():
-		input_port_data[to_port]=input
-		input_port_ready[to_port]=true
-		if is_ready():
-			is_out_ready=process_input(id)
-			
-			for i in range(input_port_ready.size()):
-				input_port_ready[i]=false
-##当前所有输入端口的数据是否全部准备好
-func is_ready()->bool:
+		dic[self].append(false)
+
+#当前输入标记堆是否就绪
+func is_input_dic_ready(ready_dic:Dictionary):
+	if not ready_dic.has(self):
+		return false
+	var arr=ready_dic[self]
 	var res:bool=true
-	for i in input_port_ready:
+	for i in arr:
 		res=res and i
 	return res
-##对输入进行处理，交给子类进行数据处理，当前端口数据存在input_port_data:Array中
-func process_input(id:String)->bool:
+
+
+
+func process_input(id:String,input_port_data:Array,output_port_data:Array):
 	
 	
-	
-	return false
 	pass
-##将数据发送到端口
-func sent_data_to_out(output,port:int,id:String)->bool:
-	if port<output_port_array.size():
-		output_port_data[port]=output
-		return true
-	else:
-		return false
+#执行输入，返回输出是否就绪,就绪结果输出写入output dic
+func act(id:String,input,to_port:int,input_dic:Dictionary,input_ready_dic:Dictionary,output_dic:Dictionary):
+	if to_port<input_port_array.size():
+		input_dic[self][to_port]=input
+		input_ready_dic[self][to_port]=true
+		#如果输入准备好
+		if is_input_dic_ready(input_ready_dic):
+			var res:bool=await process_input(id,input_dic[self],output_dic[self])
+			init_ready_dic(input_ready_dic)
+			return res
+	return false
+
+
+
+
 ##从data字典中加载数据
 func load_from_data(data:Dictionary):
 	if data.has("position_x") and data.has("position_y"):

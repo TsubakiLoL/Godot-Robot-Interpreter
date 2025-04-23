@@ -116,6 +116,9 @@ func set_init_state(state):
 	if init_state!=null:
 		init_state.is_init=false
 	init_state=state
+	
+
+	
 ##判定字典时间，擦除已经过期的用户状态实例（建议定期执行）
 func judge()->void:
 	for i in user_instance_array.keys():
@@ -151,7 +154,10 @@ func delete():
 	for i in node_list:
 		i.delete()
 	call_deferred("free")
-
+###收到消息
+#func prompt_message(id:String,triger_type:ChatNodeTriger.triger_type,mes:Dictionary):
+	#sent_data_to_out([triger_type,mes],0,id)
+	#VLR(id)
 var prompt_list:Array=[]
 #当前是否在debug中
 var is_in_debug:bool=false
@@ -161,7 +167,6 @@ func prompt_message(id:String,triger_type:String,mes:Dictionary):
 	if not id in user_instance_array:
 		add_user_instance(id)
 	var now_state=user_instance_array[id][0]
-	now_state.sent_data_to_out([triger_type,mes],0,id)
 	if is_in_debug:
 		debug_cache.append({
 		"id":id,
@@ -169,85 +174,114 @@ func prompt_message(id:String,triger_type:String,mes:Dictionary):
 		"mes":mes,
 		"frame":[]
 		})
-		VLR_debug(id,now_state)
+		await VLR_debug(id,now_state,[[triger_type,mes]])
 		debug_cache_update.emit()
 	else:
-		VLR(id,now_state)
-
-#当调试消息更新时触发
+		await VLR(id,now_state,[[triger_type,mes]])
+	
 signal debug_cache_update
 
 var debug_cache:Array=[]
 var message_list:Array=[]
 
+
 ##循环代替递归调用
-func VLR(id:String,from_node:ChatNode):
+func VLR(id:String,from_node:ChatNode,from_data:Array):
 	var stack:Array[ChatNode]=[]
 	var stack_index:Array[int]
 	var stack_data:Array=[]
 	stack.append(from_node)
 	stack_index.append(0)
-	stack_data.append(from_node.output_port_data)
+	stack_data.append(from_data)
+	
+	#输入数据缓存
+	var input_data_dic:Dictionary={}
+	#就绪数据缓存
+	var input_ready_dic:Dictionary={}
+	#输出数据缓存
+	var output_data_dic:Dictionary={}
+	#初始化缓存
+	for i in node_list:
+		i.init_input_dic(input_data_dic,input_ready_dic)
+		i.init_output_dic(output_data_dic)
+	output_data_dic[from_node]=from_data
 	while stack.size()!=0:
-		while stack_index[stack_index.size()-1]<stack[stack.size()-1].next_node_array.size():
-			var now_next=stack[stack.size()-1].next_node_array[stack_index[stack_index.size()-1]]
+		while stack_index.back()<stack.back().next_node_array.size():
+			var now_next=stack.back().next_node_array[stack_index.back()]
 			var now_node:ChatNode=now_next[0]
 			var parent_node:ChatNode=stack.back()
 			var parent_index:int=stack_index.back()
 			var parent_data=stack_data.back()
-			now_node.act(parent_data[parent_node.next_node_array[parent_index][1]],parent_node.next_node_array[parent_index][2],id)
+			var is_out_r=await now_node.act(id,
+				parent_data[parent_node.next_node_array[parent_index][1]],
+				parent_node.next_node_array[parent_index][2],
+				input_data_dic,input_ready_dic,
+				output_data_dic
+				)
 			stack_index[stack_index.size()-1]+=1
-			if now_node.next_node_array.size()!=0 and now_node.is_out_ready:
+			if now_node.next_node_array.size()!=0 and is_out_r:
 				stack.append(now_next[0])
 				stack_index.append(0)
-				stack_data.append(now_node.output_port_data)
-			now_node.is_out_ready=false
+				stack_data.append(output_data_dic[now_node])
 		stack.pop_back()
 		stack_index.pop_back()
 		stack_data.pop_back()
-func VLR_debug(id:String,from_node:ChatNode):
+func VLR_debug(id:String,from_node:ChatNode,from_data:Array):
+	
 	var stack:Array[ChatNode]=[]
 	var stack_index:Array[int]
 	var stack_data:Array=[]
 	stack.append(from_node)
 	stack_index.append(0)
-	stack_data.append(from_node.output_port_data)
+	stack_data.append(from_data)
 	var frame_data:Dictionary={
 		"id":from_node.id,
 		"type":from_node.mod_node,
 		"input_data_type":[],
 		"input_data_arr":[],
 		"output_data_type":from_node.output_port_array.duplicate(),
-		"output_data_arr":from_node.output_port_data.duplicate()
+		"output_data_arr":from_data.duplicate()
 	}
-	debug_cache[debug_cache.size()-1]["frame"].append(frame_data)
 	
+	debug_cache[debug_cache.size()-1]["frame"].append(frame_data)
+	#输入数据缓存
+	var input_data_dic:Dictionary={}
+	#就绪数据缓存
+	var input_ready_dic:Dictionary={}
+	#输出数据缓存
+	var output_data_dic:Dictionary={}
+	#初始化缓存
+	for i in node_list:
+		i.init_input_dic(input_data_dic,input_ready_dic)
+		i.init_output_dic(output_data_dic)
 	while stack.size()!=0:
-		while stack_index[stack_index.size()-1]<stack[stack.size()-1].next_node_array.size():
-			var now_next=stack[stack.size()-1].next_node_array[stack_index[stack_index.size()-1]]
+		while stack_index.back()<stack.back().next_node_array.size():
+			var now_next=stack.back().next_node_array[stack_index.back()]
 			var now_node:ChatNode=now_next[0]
 			var parent_node:ChatNode=stack.back()
 			var parent_index:int=stack_index.back()
 			var parent_data=stack_data.back()
-			now_node.act(parent_data[parent_node.next_node_array[parent_index][1]],parent_node.next_node_array[parent_index][2],id)
+			var is_out_r=await now_node.act(id,
+				parent_data[parent_node.next_node_array[parent_index][1]],
+				parent_node.next_node_array[parent_index][2],
+				input_data_dic,input_ready_dic,
+				output_data_dic
+				)
 			stack_index[stack_index.size()-1]+=1
-			if now_node.is_out_ready:
-				
+			print("执行结果"+str(is_out_r))
+			if now_node.next_node_array.size()!=0 and is_out_r:
+				stack.append(now_next[0])
+				stack_index.append(0)
+				stack_data.append(output_data_dic[now_node])
 				var frame_data_n:Dictionary={
 					"id":now_node.id,
 					"type":now_node.mod_node,
 					"input_data_type":now_node.input_port_array.duplicate(),
-					"input_data_arr":now_node.input_port_data.duplicate(),
+					"input_data_arr":input_data_dic[now_node].duplicate(),
 					"output_data_type":now_node.output_port_array.duplicate(),
-					"output_data_arr":now_node.output_port_data.duplicate()
+					"output_data_arr":output_data_dic[now_node].duplicate()
 				}
 				debug_cache[debug_cache.size()-1]["frame"].append(frame_data_n)
-				
-				now_node.is_out_ready=false
-				if now_node.next_node_array.size()!=0:
-					stack.append(now_next[0])
-					stack_index.append(0)
-					stack_data.append(now_node.output_port_data)
 		stack.pop_back()
 		stack_index.pop_back()
 		stack_data.pop_back()
